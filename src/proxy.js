@@ -10,5 +10,5 @@ export default async function proxy(req) {
   return NextResponse.next();
 }
 export const config = {
-  matcher: ["/shop/:path*","/manage-products/:path*","/orders/:path*", "/cart/:path*",],
+  matcher: ["/home/:path*","/shop/:path*","/manage-products/:path*","/orders/:path*", "/cart/:path*",],
 };

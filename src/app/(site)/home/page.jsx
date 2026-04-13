@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 import { auth } from "@/auth";
 import { getTopSellingProducts } from "@/service/product.service";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import LandingBestSellerSectionComponent from "../../../components/landing/LandingBestSellerSectionComponent";
 import LandingEssentialComponent from "../../../components/landing/LandingEssentialComponent";
 import LandingHeroSectionComponent from "../../../components/landing/LandingHeroSectionComponent";
@@ -9,6 +10,11 @@ import { categories } from "../../../data/mockData";
 
 export default async function Home() {
   const session = await auth();
+
+  if (!session) {
+    redirect("/login");
+  }
+
   const token = session?.accessToken;
 
   const response = await getTopSellingProducts(4, token);

@@ -1,7 +1,7 @@
 "use client";
 
-import { signIn } from "next-auth/react"; 
 import { Button } from "@heroui/react";
+import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
@@ -24,7 +24,8 @@ export default function LoginFormComponent() {
       const res = await signIn("credentials", {
         email: data.email,
         password: data.password,
-        redirect: false,
+        redirect: true,
+        callbackUrl: "/home",
       });
 
       setLoading(false);
@@ -34,7 +35,7 @@ export default function LoginFormComponent() {
         toast.error("Login failed: Invalid email or password");
       } else {
         toast.success("Login successful!");
-        router.push("/home"); // redirect after success
+        // NextAuth will handle the redirect
       }
     } catch (error) {
       setLoading(false);
