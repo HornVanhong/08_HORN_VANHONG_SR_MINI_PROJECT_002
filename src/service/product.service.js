@@ -184,9 +184,6 @@ export async function createProduct(productData, token = null) {
   try {
     const headers = getAuthHeaders(token);
 
-    // Log what we're sending
-    console.log("createProduct payload:", JSON.stringify(productData, null, 2));
-
     const res = await fetch(`${BASE_URL}/products`, {
       method: "POST",
       headers,
@@ -195,19 +192,19 @@ export async function createProduct(productData, token = null) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => null);
-      // Log full error so we can see what field is wrong
-      console.error("createProduct API error:", JSON.stringify(err, null, 2));
-      throw new Error(
-        err?.message ||
-          err?.title ||
-          `Create product failed with status ${res.status}`,
-      );
+
+      const errorMessage =
+        err?.detail || err?.message || err?.title || "Unknown error";
+
+      const error = new Error(errorMessage);
+      error.status = res.status;
+      error.details = err?.errors;
+      throw error;
     }
 
     const data = await res.json();
     return data;
   } catch (error) {
-    console.error("createProduct error:", error);
     throw error;
   }
 }
@@ -223,11 +220,13 @@ export async function updateProduct(productId, productData, token = null) {
 
     if (!res.ok) {
       const err = await res.json().catch(() => null);
-      throw new Error(
-        err?.message ||
-          err?.title ||
-          `Update product failed with status ${res.status}`,
-      );
+      const errorMessage =
+        err?.detail || err?.message || err?.title || "Unknown error";
+
+      const error = new Error(errorMessage);
+      error.status = res.status;
+      error.details = err?.errors;
+      throw error;
     }
 
     const data = await res.json();

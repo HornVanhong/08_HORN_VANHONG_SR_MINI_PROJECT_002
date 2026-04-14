@@ -1,18 +1,30 @@
 "use client";
 
 import { Button } from "@heroui/react";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import toast from "react-hot-toast";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().email("Must be a valid email address"),
+  password: z.string().min(1, "Password is required"),
+});
 
 export default function LoginFormComponent() {
   const [submitError, setSubmitError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const { register, handleSubmit } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(loginSchema),
     defaultValues: { email: "", password: "" },
   });
 
@@ -24,23 +36,28 @@ export default function LoginFormComponent() {
       const res = await signIn("credentials", {
         email: data.email,
         password: data.password,
-        redirect: true,
-        callbackUrl: "/home",
+        redirect: false,
       });
 
       setLoading(false);
 
       if (res?.error) {
-        setSubmitError("Invalid email or password");
-        toast.error("Login failed: Invalid email or password");
-      } else {
-        toast.success("Login successful!");
-        // NextAuth will handle the redirect
+        const message =
+          res.error === "CredentialsSignin"
+            ? "Invalid email or password"
+            : res.error;
+        setSubmitError(message);
+        toast.error(`Login failed: ${message}`);
+        return;
       }
+
+      toast.success("Login successful!");
+      router.push("/home");
     } catch (error) {
       setLoading(false);
-      setSubmitError("Something went wrong");
-      toast.error("Something went wrong. Please try again.");
+      const message = error?.message || "Something went wrong";
+      setSubmitError(message);
+      toast.error(message);
       console.error("Login error:", error);
     }
   };
@@ -62,9 +79,14 @@ export default function LoginFormComponent() {
         <input
           type="email"
           {...register("email")}
-          className="mt-1.5 w-full rounded-xl border px-4 py-3 text-black"
+          className={`mt-1.5 w-full rounded-xl border px-4 py-3 text-black ${
+            errors.email ? "border-red-400" : "border-gray-200"
+          }`}
           placeholder="you@example.com"
         />
+        {errors.email && (
+          <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>
+        )}
       </div>
 
       <div>
@@ -74,9 +96,14 @@ export default function LoginFormComponent() {
         <input
           type="password"
           {...register("password")}
-          className="mt-1.5 w-full rounded-xl border px-4 py-3 text-black"
+          className={`mt-1.5 w-full rounded-xl border px-4 py-3 text-black ${
+            errors.password ? "border-red-400" : "border-gray-200"
+          }`}
           placeholder="••••••••"
         />
+        {errors.password && (
+          <p className="text-red-500 text-sm mt-1">{errors.password.message}</p>
+        )}
       </div>
 
       <Button

@@ -12,12 +12,29 @@ export async function loginService(data) {
     },
   });
 
+  const payload = await res.json().catch(() => null);
+
   if (!res.ok) {
-    throw new Error(`Login failed with status: ${res.status}`);
+    const errorMessage =
+      payload?.detail || payload?.message || payload?.title || "Login failed";
+    const details = payload?.errors;
+    const detailText = details
+      ? Object.entries(details)
+          .map(([key, value]) => `${key}: ${value}`)
+          .join(" | ")
+      : null;
+
+    const fullMessage = detailText
+      ? `${errorMessage} (${detailText})`
+      : errorMessage;
+
+    const error = new Error(fullMessage);
+    error.status = res.status;
+    error.details = details;
+    throw error;
   }
 
-  const loggedUser = await res.json();
-  return loggedUser;
+  return payload;
 }
 export async function registerService(data) {
   try {

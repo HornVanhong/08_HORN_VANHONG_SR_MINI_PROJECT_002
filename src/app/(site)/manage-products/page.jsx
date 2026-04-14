@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
+import { z } from "zod";
 import { getCategories } from "../../../service/category.service";
 import {
   createProduct,
@@ -13,7 +14,37 @@ import {
   updateProduct,
 } from "../../../service/product.service";
 
-// ─── Star Rating ─────────────────────────────────────────────────────────────
+const productSchema = z.object({
+  name: z
+    .string()
+    .min(1, "Name is required")
+    .min(3, "Name must be at least 3 characters"),
+  price: z
+    .string()
+    .min(1, "Price is required")
+    .pipe(z.coerce.number().positive("Price must be a positive number")),
+  category: z.string().min(1, "Category is required"),
+  imageUrl: z
+    .string()
+    .optional()
+    .default("")
+    .refine(
+      (url) => !url || isValidUrl(url),
+      "Image URL must be a valid URL (e.g., https://example.com/image.jpg)",
+    ),
+  colors: z
+    .array(z.string())
+    .min(1, "Select at least one color")
+    .optional()
+    .default([]),
+  sizes: z
+    .array(z.string())
+    .min(1, "Select at least one size")
+    .optional()
+    .default([]),
+  description: z.string().optional().default(""),
+});
+
 function StarRating({ value = 0, max = 5 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
@@ -38,7 +69,6 @@ function StarRating({ value = 0, max = 5 }) {
   );
 }
 
-// ─── Dropdown Menu ────────────────────────────────────────────────────────────
 function ProductMenu({ onEdit, onDelete }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -138,11 +168,10 @@ function ProductMenu({ onEdit, onDelete }) {
   );
 }
 
-// ─── Modal ────────────────────────────────────────────────────────────────────
 const COLOR_OPTIONS = ["green", "gray", "red", "blue", "white"];
 const SIZE_OPTIONS = ["s", "m", "l", "xl", "xxl", "xxxl"];
 
-function ProductModal({ mode, product, onClose, onSave, categories }) {
+function ProductModal({ mode, product, onClose, onSave, categories, error }) {
   const CATEGORY_OPTIONS = [
     {
       value: "",
@@ -161,7 +190,7 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
   ];
   const [form, setForm] = useState({
     name: product?.name || "",
-    price: product?.price || "",
+    price: product?.price ? String(product.price) : "", 
     category: product?.categoryId || "",
     imageUrl: product?.imageUrl || "",
     colors: product?.colors?.filter((c) => c !== "string") || [],
@@ -170,8 +199,15 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
       product?.description === "string" ? "" : product?.description || "",
   });
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [submitError, setSubmitError] = useState("");
 
-  const handle = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const handle = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }));
+    if (errors[k]) {
+      setErrors((e) => ({ ...e, [k]: null }));
+    }
+  };
 
   const toggleColor = (color) => {
     setForm((f) => ({
@@ -180,6 +216,9 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
         ? f.colors.filter((c) => c !== color)
         : [...f.colors, color],
     }));
+    if (errors.colors) {
+      setErrors((e) => ({ ...e, colors: null }));
+    }
   };
 
   const toggleSize = (size) => {
@@ -189,35 +228,32 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
         ? f.sizes.filter((s) => s !== size)
         : [...f.sizes, size],
     }));
+    if (errors.sizes) {
+      setErrors((e) => ({ ...e, sizes: null }));
+    }
   };
 
   const submit = async () => {
-    if (!form.name || !form.price)
-      return toast.error("Name and price are required");
+    setSubmitError("");
+    setErrors({});
+
+    const result = productSchema.safeParse(form);
+
+    if (!result.success) {
+      const fieldErrors = {};
+      result.error.issues.forEach((err) => {
+        if (err.path[0]) {
+          fieldErrors[err.path[0]] = err.message;
+        }
+      });
+      setErrors(fieldErrors);
+      toast.error("Please fix the errors below");
+      return;
+    }
+
     setSaving(true);
     await onSave(form);
     setSaving(false);
-  };
-
-  const inputStyle = {
-    width: "100%",
-    padding: "9px 12px",
-    border: "1px solid #e5e7eb",
-    borderRadius: 8,
-    fontSize: 14,
-    outline: "none",
-    color: "#111827",
-    boxSizing: "border-box",
-    background: "white",
-    transition: "border-color 0.15s",
-  };
-
-  const labelStyle = {
-    display: "block",
-    fontSize: 13,
-    fontWeight: 600,
-    color: "#374151",
-    marginBottom: 6,
   };
 
   return (
@@ -267,9 +303,6 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
               >
                 {mode === "create" ? "Create product" : "Edit product"}
               </h2>
-              <p style={{ margin: "4px 0 0", fontSize: 13, color: "#9ca3af" }}>
-                Demo CRUD only (local state). Refresh resets changes.
-              </p>
             </div>
             <button
               onClick={onClose}
@@ -290,6 +323,21 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
               <X size={18} />
             </button>
           </div>
+          {(submitError || error) && (
+            <div
+              style={{
+                marginTop: 12,
+                padding: "10px 12px",
+                borderRadius: 8,
+                background: "#fee2e2",
+                border: "1px solid #fecaca",
+                color: "#991b1b",
+                fontSize: 13,
+              }}
+            >
+              {submitError || error}
+            </div>
+          )}
         </div>
 
         {/* Body */}
@@ -307,27 +355,97 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
           >
             <div>
-              <label style={labelStyle}>Name</label>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#374151",
+                  marginBottom: 6,
+                }}
+              >
+                Name{" "}
+                {errors.name && <span style={{ color: "#dc2626" }}>*</span>}
+              </label>
               <input
                 value={form.name}
                 onChange={handle("name")}
                 placeholder="e.g. Tea-Trica BHA Foam"
-                style={inputStyle}
-                onFocus={(e) => (e.target.style.borderColor = "#22c55e")}
-                onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  border: `1px solid ${errors.name ? "#dc2626" : "#e5e7eb"}`,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  outline: "none",
+                  color: "#111827",
+                  boxSizing: "border-box",
+                  background: "white",
+                  transition: "border-color 0.15s",
+                }}
+                onFocus={(e) =>
+                  (e.target.style.borderColor = errors.name
+                    ? "#dc2626"
+                    : "#22c55e")
+                }
+                onBlur={(e) =>
+                  (e.target.style.borderColor = errors.name
+                    ? "#dc2626"
+                    : "#e5e7eb")
+                }
               />
+              {errors.name && (
+                <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                  {errors.name}
+                </p>
+              )}
             </div>
             <div>
-              <label style={labelStyle}>Price</label>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#374151",
+                  marginBottom: 6,
+                }}
+              >
+                Price{" "}
+                {errors.price && <span style={{ color: "#dc2626" }}>*</span>}
+              </label>
               <input
                 type="number"
                 value={form.price}
                 onChange={handle("price")}
                 placeholder="e.g. 62"
-                style={inputStyle}
-                onFocus={(e) => (e.target.style.borderColor = "#22c55e")}
-                onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  border: `1px solid ${errors.price ? "#dc2626" : "#e5e7eb"}`,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  outline: "none",
+                  color: "#111827",
+                  boxSizing: "border-box",
+                  background: "white",
+                  transition: "border-color 0.15s",
+                }}
+                onFocus={(e) =>
+                  (e.target.style.borderColor = errors.price
+                    ? "#dc2626"
+                    : "#22c55e")
+                }
+                onBlur={(e) =>
+                  (e.target.style.borderColor = errors.price
+                    ? "#dc2626"
+                    : "#e5e7eb")
+                }
               />
+              {errors.price && (
+                <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                  {errors.price}
+                </p>
+              )}
             </div>
           </div>
 
@@ -336,13 +454,32 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}
           >
             <div>
-              <label style={labelStyle}>Category</label>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#374151",
+                  marginBottom: 6,
+                }}
+              >
+                Category{" "}
+                {errors.category && <span style={{ color: "#dc2626" }}>*</span>}
+              </label>
               <select
                 value={form.category}
                 onChange={handle("category")}
                 disabled={categories.length === 0}
                 style={{
-                  ...inputStyle,
+                  width: "100%",
+                  padding: "9px 12px",
+                  border: `1px solid ${errors.category ? "#dc2626" : "#e5e7eb"}`,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  outline: "none",
+                  color: "#111827",
+                  boxSizing: "border-box",
+                  background: "white",
                   appearance: "none",
                   paddingRight: 32,
                   cursor: categories.length === 0 ? "not-allowed" : "pointer",
@@ -358,23 +495,74 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
                   </option>
                 ))}
               </select>
+              {errors.category && (
+                <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                  {errors.category}
+                </p>
+              )}
             </div>
             <div>
-              <label style={labelStyle}>Image URL (optional)</label>
+              <label
+                style={{
+                  display: "block",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#374151",
+                  marginBottom: 6,
+                }}
+              >
+                Image URL (optional){" "}
+                {errors.imageUrl && <span style={{ color: "#dc2626" }}>*</span>}
+              </label>
               <input
                 value={form.imageUrl}
                 onChange={handle("imageUrl")}
                 placeholder="https://..."
-                style={inputStyle}
-                onFocus={(e) => (e.target.style.borderColor = "#22c55e")}
-                onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  border: `1px solid ${errors.imageUrl ? "#dc2626" : "#e5e7eb"}`,
+                  borderRadius: 8,
+                  fontSize: 14,
+                  outline: "none",
+                  color: "#111827",
+                  boxSizing: "border-box",
+                  background: "white",
+                  transition: "border-color 0.15s",
+                }}
+                onFocus={(e) =>
+                  (e.target.style.borderColor = errors.imageUrl
+                    ? "#dc2626"
+                    : "#22c55e")
+                }
+                onBlur={(e) =>
+                  (e.target.style.borderColor = errors.imageUrl
+                    ? "#dc2626"
+                    : "#e5e7eb")
+                }
               />
+              {errors.imageUrl && (
+                <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                  {errors.imageUrl}
+                </p>
+              )}
             </div>
           </div>
 
           {/* Colors */}
           <div>
-            <label style={labelStyle}>Colors</label>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#374151",
+                marginBottom: 6,
+              }}
+            >
+              Colors{" "}
+              {errors.colors && <span style={{ color: "#dc2626" }}>*</span>}
+            </label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {COLOR_OPTIONS.map((color) => {
                 const selected = form.colors.includes(color);
@@ -414,11 +602,27 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
                 );
               })}
             </div>
+            {errors.colors && (
+              <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                {errors.colors}
+              </p>
+            )}
           </div>
 
           {/* Sizes */}
           <div>
-            <label style={labelStyle}>Sizes</label>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#374151",
+                marginBottom: 6,
+              }}
+            >
+              Sizes{" "}
+              {errors.sizes && <span style={{ color: "#dc2626" }}>*</span>}
+            </label>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
               {SIZE_OPTIONS.map((size) => {
                 const selected = form.sizes.includes(size);
@@ -458,21 +662,45 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
                 );
               })}
             </div>
+            {errors.sizes && (
+              <p style={{ color: "#dc2626", fontSize: 12, marginTop: 4 }}>
+                {errors.sizes}
+              </p>
+            )}
           </div>
 
           {/* Description */}
           <div>
-            <label style={labelStyle}>Description</label>
+            <label
+              style={{
+                display: "block",
+                fontSize: 13,
+                fontWeight: 600,
+                color: "#374151",
+                marginBottom: 6,
+              }}
+            >
+              Description
+            </label>
             <textarea
               value={form.description}
               onChange={handle("description")}
               placeholder="Short description shown on the product card..."
               rows={4}
               style={{
-                ...inputStyle,
+                width: "100%",
+                padding: "9px 12px",
+                border: "1px solid #e5e7eb",
+                borderRadius: 8,
+                fontSize: 14,
+                outline: "none",
+                color: "#111827",
+                boxSizing: "border-box",
+                background: "white",
                 resize: "vertical",
                 fontFamily: "inherit",
                 lineHeight: 1.5,
+                transition: "border-color 0.15s",
               }}
               onFocus={(e) => (e.target.style.borderColor = "#22c55e")}
               onBlur={(e) => (e.target.style.borderColor = "#e5e7eb")}
@@ -532,8 +760,18 @@ function ProductModal({ mode, product, onClose, onSave, categories }) {
   );
 }
 
-// ─── Product Card ─────────────────────────────────────────────────────────────
+function isValidUrl(url) {
+  if (!url || typeof url !== "string") return false;
+  try {
+    new URL(url);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function ProductCard({ product, onEdit, onDelete, onQuickAdd }) {
+  const hasValidImage = isValidUrl(product.imageUrl);
   return (
     <div
       style={{
@@ -561,7 +799,7 @@ function ProductCard({ product, onEdit, onDelete, onQuickAdd }) {
             onDelete={() => onDelete(product)}
           />
         </div>
-        {product.imageUrl ? (
+        {hasValidImage ? (
           <Image
             src={product.imageUrl}
             alt={product.name}
@@ -650,7 +888,6 @@ function ProductCard({ product, onEdit, onDelete, onQuickAdd }) {
   );
 }
 
-// ─── Confirm Delete Modal ─────────────────────────────────────────────────────
 function ConfirmDeleteModal({ product, onConfirm, onCancel }) {
   return (
     <div
@@ -737,7 +974,6 @@ function ConfirmDeleteModal({ product, onConfirm, onCancel }) {
   );
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function ManageProductsPage() {
   const { data: session, status } = useSession();
   const [products, setProducts] = useState([]);
@@ -799,7 +1035,7 @@ export default function ManageProductsPage() {
         imageUrl: form.imageUrl || "string",
         colors: form.colors?.length > 0 ? form.colors : ["string"],
         sizes: form.sizes?.length > 0 ? form.sizes : ["string"],
-        categoryId: form.category || null, // Include categoryId
+        categoryId: form.category || null,
       };
 
       if (modal.mode === "create") {
@@ -812,7 +1048,28 @@ export default function ManageProductsPage() {
       setModal(null);
       fetchProducts(token);
     } catch (err) {
-      toast.error(err.message || "Something went wrong");
+      const errorMessage = err.message || "Something went wrong";
+
+      // Handle specific error types
+      if (err.message?.includes("already exists")) {
+        setModal((m) => ({
+          ...m,
+          error: "⚠️ Product name already exists. Please use a different name.",
+        }));
+      } else if (err.message?.includes("not found")) {
+        setModal((m) => ({
+          ...m,
+          error:
+            "❌ Category not found. Please select a valid category or refresh the page.",
+        }));
+      } else {
+        setModal((m) => ({
+          ...m,
+          error: errorMessage,
+        }));
+      }
+
+      toast.error(errorMessage);
     }
   };
 
@@ -1017,6 +1274,7 @@ export default function ManageProductsPage() {
           onClose={() => setModal(null)}
           onSave={handleSave}
           categories={categories}
+          error={modal.error}
         />
       )}
 
