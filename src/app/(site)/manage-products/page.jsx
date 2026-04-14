@@ -1054,13 +1054,13 @@ export default function ManageProductsPage() {
       if (err.message?.includes("already exists")) {
         setModal((m) => ({
           ...m,
-          error: "⚠️ Product name already exists. Please use a different name.",
+          error: "Product name already exists. Please use a different name.",
         }));
       } else if (err.message?.includes("not found")) {
         setModal((m) => ({
           ...m,
           error:
-            "❌ Category not found. Please select a valid category or refresh the page.",
+            "Category not found. Please select a valid category or refresh the page.",
         }));
       } else {
         setModal((m) => ({
